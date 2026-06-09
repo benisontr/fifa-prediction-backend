@@ -10,6 +10,7 @@ dotenv.config();
 
 const authRoutes = require('./routes/auth.routes');
 const matchRoutes = require('./routes/match.routes');
+const leaderboardRoutes = require('./routes/leaderboard.routes');
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api', matchRoutes);
+app.use('/api', leaderboardRoutes);
 
 /**
  * 404 Handler
