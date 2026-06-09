@@ -150,16 +150,15 @@ const getAdminDashboard = async (req, res) => {
   try {
     // Use Promise.all() to execute all count operations in parallel
     const [totalUsers, totalMatches, totalPredictions] = await Promise.all([
-      User.countDocuments(),
+      User.countDocuments({ role: 'user' }),
       Match.countDocuments(),
       Prediction.countDocuments(),
     ]);
 
     // Count completed and active matches
-    const now = new Date();
     const [completedMatches, activeMatches] = await Promise.all([
-      Match.countDocuments({ matchDateTime: { $lt: now } }),
-      Match.countDocuments({ matchDateTime: { $gte: now } }),
+      Match.countDocuments({ status: 'completed' }),
+      Match.countDocuments({ status: { $ne: 'completed' } }),
     ]);
 
     return res.json({
