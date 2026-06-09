@@ -6,6 +6,7 @@ const {
   getAllMatches,
   getMatchById,
   updateMatch,
+  submitMatchResult,
   deleteMatch,
   getActiveMatches,
   getUpcomingMatches,
@@ -17,6 +18,7 @@ const router = express.Router();
 router.post('/admin/matches', protect, adminOnly, createMatch);
 router.get('/admin/matches', protect, adminOnly, getAllMatches);
 router.get('/admin/matches/:id', protect, adminOnly, getMatchById);
+router.post('/admin/matches/:id/result', protect, adminOnly, submitMatchResult);
 router.put('/admin/matches/:id', protect, adminOnly, updateMatch);
 router.delete('/admin/matches/:id', protect, adminOnly, deleteMatch);
 

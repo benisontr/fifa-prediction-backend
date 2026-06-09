@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 const Match = require('../models/Match');
+const Prediction = require('../models/Prediction');
+const User = require('../models/User');
+const { calculatePoints } = require('../services/scoring.service');
 
 // Helper to validate ObjectId
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -176,6 +179,85 @@ const updateMatch = async (req, res) => {
   }
 };
 
+// Submit match result and score predictions (Admin)
+const submitMatchResult = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { actualTeamAScore, actualTeamBScore } = req.body;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid match id' });
+    }
+
+    if (typeof actualTeamAScore === 'undefined' || typeof actualTeamBScore === 'undefined') {
+      return res.status(400).json({ success: false, message: 'Both actualTeamAScore and actualTeamBScore are required' });
+    }
+
+    const teamAScore = Number(actualTeamAScore);
+    const teamBScore = Number(actualTeamBScore);
+
+    if (!Number.isInteger(teamAScore) || teamAScore < 0) {
+      return res.status(400).json({ success: false, message: 'actualTeamAScore must be a non-negative integer' });
+    }
+
+    if (!Number.isInteger(teamBScore) || teamBScore < 0) {
+      return res.status(400).json({ success: false, message: 'actualTeamBScore must be a non-negative integer' });
+    }
+
+    const match = await Match.findById(id);
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match not found' });
+    }
+
+    if (match.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Match has already been completed' });
+    }
+
+    match.actualTeamAScore = teamAScore;
+    match.actualTeamBScore = teamBScore;
+
+    if (teamAScore > teamBScore) {
+      match.actualWinner = match.teamA;
+    } else if (teamBScore > teamAScore) {
+      match.actualWinner = match.teamB;
+    } else {
+      match.actualWinner = 'DRAW';
+    }
+
+    const predictions = await Prediction.find({ matchId: match._id }).lean().exec();
+    let processedPredictions = 0;
+
+    for (const prediction of predictions) {
+      const points = calculatePoints(prediction, match);
+
+      await Prediction.findByIdAndUpdate(
+        prediction._id,
+        { pointsEarned: points },
+        { new: true }
+      ).exec();
+
+      await User.findByIdAndUpdate(
+        prediction.userId,
+        { $inc: { totalPoints: points } },
+        { new: true }
+      ).exec();
+
+      processedPredictions += 1;
+    }
+
+    match.status = 'completed';
+    await match.save();
+
+    return res.json({
+      success: true,
+      message: 'Match result processed successfully',
+      processedPredictions,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
+  }
+};
+
 // Delete match (Admin)
 const deleteMatch = async (req, res) => {
   try {
@@ -233,6 +315,7 @@ module.exports = {
   getAllMatches,
   getMatchById,
   updateMatch,
+  submitMatchResult,
   deleteMatch,
   getActiveMatches,
   getUpcomingMatches,
