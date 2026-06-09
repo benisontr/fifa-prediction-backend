@@ -285,12 +285,31 @@ const deleteMatch = async (req, res) => {
 // Get active matches (Authenticated users)
 const getActiveMatches = async (req, res) => {
   try {
+    const userId = req.user._id;
+
     const matches = await Match.find({})
       .sort({ createdAt: -1 })
       .lean()
       .exec();
-    const total = matches.length;
-    return res.json({ success: true, data: { total, matches } });
+
+    const predictions = await Prediction.find({ userId }).lean().exec();
+    const predictionMap = predictions.reduce((map, prediction) => {
+      map[prediction.matchId.toString()] = prediction;
+      return map;
+    }, {});
+
+    const matchesWithPredictions = matches.map((match) => {
+      const prediction = predictionMap[match._id.toString()];
+      return {
+        ...match,
+        predictedTeamAScore: prediction ? prediction.predictedTeamAScore : null,
+        predictedTeamBScore: prediction ? prediction.predictedTeamBScore : null,
+        predictedWinner: prediction ? prediction.predictedWinner : null,
+      };
+    });
+
+    const total = matchesWithPredictions.length;
+    return res.json({ success: true, data: { total, matches: matchesWithPredictions } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
@@ -320,4 +339,3 @@ module.exports = {
   getActiveMatches,
   getUpcomingMatches,
 };
-
