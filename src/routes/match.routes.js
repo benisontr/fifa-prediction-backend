@@ -16,7 +16,7 @@ const router = express.Router();
 
 // Admin routes (require auth + admin)
 router.post('/admin/matches', protect, adminOnly, createMatch);
-router.get('/admin/matches', protect, adminOnly, getAllMatches);
+router.get('/admin/matches', protect, getAllMatches);
 router.get('/admin/matches/:id', protect, adminOnly, getMatchById);
 router.post('/admin/matches/:id/result', protect, adminOnly, submitMatchResult);
 router.put('/admin/matches/:id', protect, adminOnly, updateMatch);
