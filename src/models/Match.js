@@ -67,28 +67,22 @@ const matchSchema = new mongoose.Schema(
  * Validation:
  * Team A and Team B cannot be the same
  */
-matchSchema.pre('save', function (next) {
+matchSchema.pre('save', function () {
   if (this.teamA === this.teamB) {
-    return next(new Error('A team cannot play against itself'));
+    throw new Error('A team cannot play against itself');
   }
-
-  next();
 });
 
 /**
  * Validation:
  * Prediction closing time must be before match start time
  */
-matchSchema.pre('save', function (next) {
+matchSchema.pre('save', function () {
   if (this.predictionClosingTime >= this.matchDateTime) {
-    return next(
-      new Error(
-        'Prediction closing time must be before match start time'
-      )
+    throw new Error(
+      'Prediction closing time must be before match start time'
     );
   }
-
-  next();
 });
 
 module.exports = mongoose.model('Match', matchSchema);
