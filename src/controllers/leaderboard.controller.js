@@ -179,9 +179,36 @@ const getAdminDashboard = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/admin/users
+ * Get all users with their names and points
+ * Access: Admin only
+ * Returns: Array of users with name and totalPoints
+ */
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({ role: 'user' })
+      .select('name totalPoints')
+      .sort({ totalPoints: -1 })
+      .lean()
+      .exec();
+
+    return res.json({
+      success: true,
+      data: users,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Server error',
+    });
+  }
+};
+
 module.exports = {
   getLeaderboard,
   getUserStats,
   getMatchStats,
   getAdminDashboard,
+  getAllUsers,
 };

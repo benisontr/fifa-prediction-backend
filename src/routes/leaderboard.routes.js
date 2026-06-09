@@ -6,6 +6,7 @@ const {
   getUserStats,
   getMatchStats,
   getAdminDashboard,
+  getAllUsers,
 } = require('../controllers/leaderboard.controller');
 
 const router = express.Router();
@@ -37,5 +38,12 @@ router.get('/matches/:id/stats', protect, getMatchStats);
  * Access: Admin only
  */
 router.get('/admin/dashboard', protect, adminOnly, getAdminDashboard);
+
+/**
+ * GET /api/admin/users
+ * Get all users with names and points
+ * Access: Admin only
+ */
+router.get('/admin/users', protect, adminOnly, getAllUsers);
 
 module.exports = router;
