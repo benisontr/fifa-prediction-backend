@@ -1,11 +1,10 @@
 const mongoose = require('mongoose');
 const Match = require('../models/Match');
 
-/**
- * CREATE MATCH
- * POST /api/admin/matches
- * Admin only
- */
+// Helper to validate ObjectId
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+
+// Create a new match (Admin)
 const createMatch = async (req, res) => {
   try {
     const {
@@ -13,403 +12,167 @@ const createMatch = async (req, res) => {
       teamB,
       matchDateTime,
       predictionClosingTime,
-      perfectScorePoint,
-      winnerOnlyPoint,
+      winnerOnlyPoint = 0,
+      ...rest
     } = req.body;
 
-    // Validation: Required fields
-    if (
-      !teamA ||
-      !teamB ||
-      !matchDateTime ||
-      !predictionClosingTime
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'teamA, teamB, matchDateTime, and predictionClosingTime are required',
-      });
-    }
+    if (!teamA) return res.status(400).json({ success: false, message: 'teamA is required' });
+    if (!teamB) return res.status(400).json({ success: false, message: 'teamB is required' });
+    if (!matchDateTime) return res.status(400).json({ success: false, message: 'matchDateTime is required' });
+    if (!predictionClosingTime) return res.status(400).json({ success: false, message: 'predictionClosingTime is required' });
 
-    // Validation: teamA and teamB are different
-    if (teamA.trim().toLowerCase() === teamB.trim().toLowerCase()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Team A and Team B cannot be the same',
-      });
-    }
+    if (teamA === teamB) return res.status(400).json({ success: false, message: 'teamA and teamB must be different' });
 
-    // Validation: predictionClosingTime is before matchDateTime
-    const closingTime = new Date(predictionClosingTime);
-    const startTime = new Date(matchDateTime);
+    const matchDate = new Date(matchDateTime);
+    const predClose = new Date(predictionClosingTime);
 
-    if (closingTime >= startTime) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Prediction closing time must be before match start time',
-      });
-    }
+    if (Number.isNaN(matchDate.getTime())) return res.status(400).json({ success: false, message: 'Invalid matchDateTime' });
+    if (Number.isNaN(predClose.getTime()) || predClose.getTime() <= 0) return res.status(400).json({ success: false, message: 'Invalid predictionClosingTime' });
 
-    // Create match
-    const match = await Match.create({
+    const winnerPoints = Number(winnerOnlyPoint);
+    if (Number.isNaN(winnerPoints) || winnerPoints < 0) return res.status(400).json({ success: false, message: 'winnerOnlyPoint must be >= 0' });
+
+    const newMatch = new Match({
       teamA: teamA.trim(),
       teamB: teamB.trim(),
-      matchDateTime: startTime,
-      predictionClosingTime: closingTime,
-      perfectScorePoint:
-        perfectScorePoint !== undefined ? perfectScorePoint : 2,
-      winnerOnlyPoint:
-        winnerOnlyPoint !== undefined ? winnerOnlyPoint : 1,
+      matchDateTime: matchDate,
+      predictionClosingTime: predClose,
+      winnerOnlyPoint: winnerPoints,
+      status: rest.status || 'open',
+      ...rest,
     });
 
-    return res.status(201).json({
-      success: true,
-      data: match,
-    });
-  } catch (error) {
-    console.error('Error creating match:', error);
-
-    if (error.message.includes('A team cannot play against itself')) {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    if (
-      error.message.includes(
-        'Prediction closing time must be before match start time'
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while creating match',
-    });
+    const saved = await newMatch.save();
+    return res.status(201).json({ success: true, data: saved });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
 };
 
-/**
- * GET ALL MATCHES
- * GET /api/admin/matches
- * Admin only
- */
+// Get all matches (Admin)
 const getAllMatches = async (req, res) => {
   try {
-    const matches = await Match.find()
-      .sort({ createdAt: -1 });
-
+    const matches = await Match.find({}).sort({ createdAt: -1 }).lean().exec();
     const total = await Match.countDocuments();
-
-    return res.status(200).json({
-      success: true,
-      data: matches,
-      total,
-    });
-  } catch (error) {
-    console.error('Error fetching matches:', error);
-
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while fetching matches',
-    });
+    return res.json({ success: true, data: { total, matches } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
 };
 
-/**
- * GET MATCH BY ID
- * GET /api/admin/matches/:id
- * Admin only
- */
+// Get match by id (Admin)
 const getMatchById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidObjectId(id)) return res.status(400).json({ success: false, message: 'Invalid match id' });
 
-    // Validation: ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid match ID',
-      });
-    }
+    const match = await Match.findById(id).lean().exec();
+    if (!match) return res.status(404).json({ success: false, message: 'Match not found' });
 
-    const match = await Match.findById(id);
-
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'Match not found',
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      data: match,
-    });
-  } catch (error) {
-    console.error('Error fetching match:', error);
-
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while fetching match',
-    });
+    return res.json({ success: true, data: match });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
 };
 
-/**
- * UPDATE MATCH
- * PUT /api/admin/matches/:id
- * Admin only
- */
+// Update match (Admin)
 const updateMatch = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      teamA,
-      teamB,
-      matchDateTime,
-      predictionClosingTime,
-      perfectScorePoint,
-      winnerOnlyPoint,
-    } = req.body;
+    if (!isValidObjectId(id)) return res.status(400).json({ success: false, message: 'Invalid match id' });
 
-    // Validation: ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid match ID',
-      });
-    }
-
-    // Find match
     const match = await Match.findById(id);
+    if (!match) return res.status(404).json({ success: false, message: 'Match not found' });
 
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'Match not found',
-      });
+    if (match.status === 'completed' || match.completed === true) {
+      return res.status(400).json({ success: false, message: 'Cannot modify a completed match' });
     }
 
-    // Validation: Cannot update if status is completed
-    if (match.status === 'completed') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot update a completed match',
-      });
+    if (new Date() >= new Date(match.matchDateTime)) {
+      return res.status(400).json({ success: false, message: 'Cannot modify a match that has already started' });
     }
 
-    // Prepare update object
-    const updateData = {};
+    const updates = { ...req.body };
 
-    if (teamA !== undefined) {
-      updateData.teamA = teamA.trim();
+    if (updates.teamA && updates.teamB && updates.teamA === updates.teamB) {
+      return res.status(400).json({ success: false, message: 'teamA and teamB must be different' });
     }
 
-    if (teamB !== undefined) {
-      updateData.teamB = teamB.trim();
+    if (updates.predictionClosingTime) {
+      const predClose = new Date(updates.predictionClosingTime);
+      if (Number.isNaN(predClose.getTime()) || predClose.getTime() <= 0) return res.status(400).json({ success: false, message: 'Invalid predictionClosingTime' });
+      updates.predictionClosingTime = predClose;
     }
 
-    if (matchDateTime !== undefined) {
-      updateData.matchDateTime = new Date(matchDateTime);
+    if (typeof updates.winnerOnlyPoint !== 'undefined') {
+      const wp = Number(updates.winnerOnlyPoint);
+      if (Number.isNaN(wp) || wp < 0) return res.status(400).json({ success: false, message: 'winnerOnlyPoint must be >= 0' });
+      updates.winnerOnlyPoint = wp;
     }
 
-    if (predictionClosingTime !== undefined) {
-      updateData.predictionClosingTime = new Date(
-        predictionClosingTime
-      );
+    if (updates.matchDateTime) {
+      const md = new Date(updates.matchDateTime);
+      if (Number.isNaN(md.getTime())) return res.status(400).json({ success: false, message: 'Invalid matchDateTime' });
+      updates.matchDateTime = md;
     }
 
-    if (perfectScorePoint !== undefined) {
-      updateData.perfectScorePoint = perfectScorePoint;
-    }
-
-    if (winnerOnlyPoint !== undefined) {
-      updateData.winnerOnlyPoint = winnerOnlyPoint;
-    }
-
-    // Validation: teamA and teamB are different (if either is being updated)
-    const finalTeamA = updateData.teamA || match.teamA;
-    const finalTeamB = updateData.teamB || match.teamB;
-
-    if (finalTeamA.toLowerCase() === finalTeamB.toLowerCase()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Team A and Team B cannot be the same',
-      });
-    }
-
-    // Validation: predictionClosingTime is before matchDateTime
-    const finalClosingTime = updateData.predictionClosingTime
-      ? new Date(updateData.predictionClosingTime)
-      : match.predictionClosingTime;
-    const finalStartTime = updateData.matchDateTime
-      ? new Date(updateData.matchDateTime)
-      : match.matchDateTime;
-
-    if (finalClosingTime >= finalStartTime) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Prediction closing time must be before match start time',
-      });
-    }
-
-    // Update match
-    const updatedMatch = await Match.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: updatedMatch,
-    });
-  } catch (error) {
-    console.error('Error updating match:', error);
-
-    if (error.message.includes('A team cannot play against itself')) {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    if (
-      error.message.includes(
-        'Prediction closing time must be before match start time'
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while updating match',
-    });
+    Object.assign(match, updates);
+    const saved = await match.save();
+    return res.json({ success: true, data: saved });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
 };
 
-/**
- * DELETE MATCH
- * DELETE /api/admin/matches/:id
- * Admin only
- */
+// Delete match (Admin)
 const deleteMatch = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Validation: ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid match ID',
-      });
-    }
+    if (!isValidObjectId(id)) return res.status(400).json({ success: false, message: 'Invalid match id' });
 
     const match = await Match.findById(id);
+    if (!match) return res.status(404).json({ success: false, message: 'Match not found' });
 
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'Match not found',
-      });
+    if (match.status === 'completed' || match.completed === true) {
+      return res.status(400).json({ success: false, message: 'Cannot delete a completed match' });
     }
 
-    // Validation: Cannot delete if status is completed
-    if (match.status === 'completed') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot delete a completed match',
-      });
+    if (new Date() >= new Date(match.matchDateTime)) {
+      return res.status(400).json({ success: false, message: 'Cannot delete a match that has already started' });
     }
 
-    await Match.findByIdAndDelete(id);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Match deleted successfully',
-    });
-  } catch (error) {
-    console.error('Error deleting match:', error);
-
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while deleting match',
-    });
+    await Match.deleteOne({ _id: id });
+    return res.json({ success: true, data: {} });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
 };
 
-/**
- * GET ACTIVE MATCHES
- * GET /api/matches/active
- * Authenticated users
- * Returns matches where predictionClosingTime > current server time AND status = "open"
- */
+// Get active matches (Authenticated users)
 const getActiveMatches = async (req, res) => {
   try {
-    // Use server time only
     const now = new Date();
-
-    const matches = await Match.find({
-      predictionClosingTime: { $gt: now },
-      status: 'open',
-    })
-      .sort({ matchDateTime: 1 });
-
-    return res.status(200).json({
-      success: true,
-      data: matches,
-      total: matches.length,
-    });
-  } catch (error) {
-    console.error('Error fetching active matches:', error);
-
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while fetching active matches',
-    });
+    const matches = await Match.find({ predictionClosingTime: { $gt: now }, status: 'open' })
+      .sort({ matchDateTime: 1 })
+      .lean()
+      .exec();
+    return res.json({ success: true, data: matches });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
 };
 
-/**
- * GET UPCOMING MATCHES
- * GET /api/matches/upcoming
- * Authenticated users
- * Returns all future matches sorted by matchDateTime ascending
- */
+// Get upcoming matches (Authenticated users)
 const getUpcomingMatches = async (req, res) => {
   try {
-    // Use server time only
     const now = new Date();
-
-    const matches = await Match.find({
-      matchDateTime: { $gt: now },
-    })
-      .sort({ matchDateTime: 1 });
-
-    return res.status(200).json({
-      success: true,
-      data: matches,
-      total: matches.length,
-    });
-  } catch (error) {
-    console.error('Error fetching upcoming matches:', error);
-
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while fetching upcoming matches',
-    });
+    const matches = await Match.find({ matchDateTime: { $gt: now } })
+      .sort({ matchDateTime: 1 })
+      .lean()
+      .exec();
+    return res.json({ success: true, data: matches });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
 };
 
@@ -422,3 +185,4 @@ module.exports = {
   getActiveMatches,
   getUpcomingMatches,
 };
+
