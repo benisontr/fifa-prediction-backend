@@ -13,7 +13,7 @@ const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
  */
 const getLeaderboard = async (req, res) => {
   try {
-    const users = await User.find({})
+    const users = await User.find({ role: 'user' })
       .select('_id name totalPoints')
       .sort({ totalPoints: -1 })
       .lean()
