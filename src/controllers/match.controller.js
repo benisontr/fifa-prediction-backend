@@ -94,26 +94,78 @@ const updateMatch = async (req, res) => {
 
     const updates = { ...req.body };
 
+    // Validate teamA and teamB
     if (updates.teamA && updates.teamB && updates.teamA === updates.teamB) {
       return res.status(400).json({ success: false, message: 'teamA and teamB must be different' });
     }
 
+    // Validate matchDateTime
+    if (updates.matchDateTime) {
+      const md = new Date(updates.matchDateTime);
+      if (Number.isNaN(md.getTime())) return res.status(400).json({ success: false, message: 'Invalid matchDateTime' });
+      updates.matchDateTime = md;
+    }
+
+    // Validate predictionClosingTime
     if (updates.predictionClosingTime) {
       const predClose = new Date(updates.predictionClosingTime);
       if (Number.isNaN(predClose.getTime()) || predClose.getTime() <= 0) return res.status(400).json({ success: false, message: 'Invalid predictionClosingTime' });
       updates.predictionClosingTime = predClose;
     }
 
+    // Validate that predictionClosingTime is before matchDateTime
+    const finalMatchDateTime = updates.matchDateTime || match.matchDateTime;
+    const finalPredClosingTime = updates.predictionClosingTime || match.predictionClosingTime;
+    if (new Date(finalPredClosingTime) >= new Date(finalMatchDateTime)) {
+      return res.status(400).json({ success: false, message: 'Prediction closing time must be before match start time' });
+    }
+
+    // Validate perfectScorePoint
+    if (typeof updates.perfectScorePoint !== 'undefined') {
+      const psp = Number(updates.perfectScorePoint);
+      if (Number.isNaN(psp) || psp < 0) return res.status(400).json({ success: false, message: 'perfectScorePoint must be >= 0' });
+      updates.perfectScorePoint = psp;
+    }
+
+    // Validate winnerOnlyPoint
     if (typeof updates.winnerOnlyPoint !== 'undefined') {
       const wp = Number(updates.winnerOnlyPoint);
       if (Number.isNaN(wp) || wp < 0) return res.status(400).json({ success: false, message: 'winnerOnlyPoint must be >= 0' });
       updates.winnerOnlyPoint = wp;
     }
 
-    if (updates.matchDateTime) {
-      const md = new Date(updates.matchDateTime);
-      if (Number.isNaN(md.getTime())) return res.status(400).json({ success: false, message: 'Invalid matchDateTime' });
-      updates.matchDateTime = md;
+    // Validate actualTeamAScore
+    if (typeof updates.actualTeamAScore !== 'undefined' && updates.actualTeamAScore !== null) {
+      const score = Number(updates.actualTeamAScore);
+      if (Number.isNaN(score) || score < 0) return res.status(400).json({ success: false, message: 'actualTeamAScore must be a non-negative number' });
+      updates.actualTeamAScore = score;
+    }
+
+    // Validate actualTeamBScore
+    if (typeof updates.actualTeamBScore !== 'undefined' && updates.actualTeamBScore !== null) {
+      const score = Number(updates.actualTeamBScore);
+      if (Number.isNaN(score) || score < 0) return res.status(400).json({ success: false, message: 'actualTeamBScore must be a non-negative number' });
+      updates.actualTeamBScore = score;
+    }
+
+    // Validate status
+    if (updates.status) {
+      const validStatus = ['open', 'closed', 'completed'];
+      if (!validStatus.includes(updates.status)) {
+        return res.status(400).json({ success: false, message: `status must be one of: ${validStatus.join(', ')}` });
+      }
+    }
+
+    // Validate actualWinner
+    if (updates.actualWinner !== undefined) {
+      if (updates.actualWinner !== null) {
+        const teamA = updates.teamA || match.teamA;
+        const teamB = updates.teamB || match.teamB;
+        const validWinners = [teamA, teamB, 'draw'];
+        if (!validWinners.includes(updates.actualWinner)) {
+          return res.status(400).json({ success: false, message: `actualWinner must be '${teamA}', '${teamB}', 'draw', or null` });
+        }
+      }
     }
 
     Object.assign(match, updates);
