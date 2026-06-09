@@ -285,12 +285,12 @@ const deleteMatch = async (req, res) => {
 // Get active matches (Authenticated users)
 const getActiveMatches = async (req, res) => {
   try {
-    const now = new Date();
-    const matches = await Match.find({ predictionClosingTime: { $gt: now }, status: 'open' })
-      .sort({ matchDateTime: 1 })
+    const matches = await Match.find({})
+      .sort({ createdAt: -1 })
       .lean()
       .exec();
-    return res.json({ success: true, data: matches });
+    const total = matches.length;
+    return res.json({ success: true, data: { total, matches } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message || 'Server error' });
   }
