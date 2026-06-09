@@ -15,7 +15,7 @@ const router = express.Router();
  * Get leaderboard with all users sorted by totalPoints
  * Access: Authenticated users
  */
-router.get('/', protect, getLeaderboard);
+router.get('/leaderboard', protect, getLeaderboard);
 
 /**
  * GET /api/users/me/stats
