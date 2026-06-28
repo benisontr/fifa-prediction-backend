@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Prediction = require('../models/Prediction');
 const Match = require('../models/Match');
+const { validatePenaltyWinner } = require('../utils/penaltyWinner.util');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -12,7 +13,7 @@ const calculatePredictedWinner = (scoreA, scoreB, teamA, teamB) => {
 
 const createPrediction = async (req, res) => {
   try {
-    const { matchId, predictedTeamAScore, predictedTeamBScore } = req.body;
+    const { matchId, predictedTeamAScore, predictedTeamBScore, penaltyWinner } = req.body;
     const userId = req.user._id;
 
     if (!matchId) {
@@ -54,6 +55,14 @@ const createPrediction = async (req, res) => {
     }
 
     const predictedWinner = calculatePredictedWinner(scoreA, scoreB, match.teamA, match.teamB);
+    const isDrawPrediction = scoreA === scoreB;
+
+    let finalPenaltyWinner = null;
+    try {
+      finalPenaltyWinner = validatePenaltyWinner(penaltyWinner, match.teamA, match.teamB, isDrawPrediction);
+    } catch (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
 
     const prediction = new Prediction({
       userId,
@@ -61,6 +70,7 @@ const createPrediction = async (req, res) => {
       predictedTeamAScore: scoreA,
       predictedTeamBScore: scoreB,
       predictedWinner,
+      penaltyWinner: finalPenaltyWinner,
     });
 
     const savedPrediction = await prediction.save();
@@ -93,7 +103,16 @@ const getMyPredictions = async (req, res) => {
 const updatePrediction = async (req, res) => {
   try {
     const { id } = req.params;
-    const { predictedTeamAScore, predictedTeamBScore, matchId: bodyMatchId, predictedWinner, userId, pointsEarned, ...rest } = req.body;
+    const {
+      predictedTeamAScore,
+      predictedTeamBScore,
+      penaltyWinner,
+      matchId: bodyMatchId,
+      predictedWinner,
+      userId,
+      pointsEarned,
+      ...rest
+    } = req.body;
 
     if (!isValidObjectId(id)) {
       return res.status(400).json({ success: false, message: 'Invalid prediction id' });
@@ -151,12 +170,31 @@ const updatePrediction = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Only score fields may be updated' });
     }
 
+    const finalScoreA = updates.predictedTeamAScore ?? prediction.predictedTeamAScore;
+    const finalScoreB = updates.predictedTeamBScore ?? prediction.predictedTeamBScore;
+    const isDrawPrediction = finalScoreA === finalScoreB;
+
+    let finalPenaltyWinner = null;
+    try {
+      finalPenaltyWinner = validatePenaltyWinner(
+        penaltyWinner !== undefined ? penaltyWinner : prediction.penaltyWinner,
+        match.teamA,
+        match.teamB,
+        isDrawPrediction
+      );
+    } catch (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    updates.penaltyWinner = finalPenaltyWinner;
+
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ success: false, message: 'No valid fields provided for update' });
     }
 
     prediction.predictedTeamAScore = updates.predictedTeamAScore ?? prediction.predictedTeamAScore;
     prediction.predictedTeamBScore = updates.predictedTeamBScore ?? prediction.predictedTeamBScore;
+    prediction.penaltyWinner = updates.penaltyWinner;
     prediction.predictedWinner = calculatePredictedWinner(
       prediction.predictedTeamAScore,
       prediction.predictedTeamBScore,

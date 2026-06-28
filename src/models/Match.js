@@ -52,6 +52,12 @@ const matchSchema = new mongoose.Schema(
       trim: true,
     },
 
+    penaltyWinnerTeam: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
     status: {
       type: String,
       enum: ['open', 'closed', 'completed'],

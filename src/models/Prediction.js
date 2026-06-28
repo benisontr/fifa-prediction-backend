@@ -32,6 +32,12 @@ const predictionSchema = new mongoose.Schema(
       trim: true,
     },
 
+    penaltyWinner: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
     pointsEarned: {
       type: Number,
       default: 0,

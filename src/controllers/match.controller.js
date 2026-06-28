@@ -3,6 +3,7 @@ const Match = require('../models/Match');
 const Prediction = require('../models/Prediction');
 const User = require('../models/User');
 const { calculatePoints } = require('../services/scoring.service');
+const { validatePenaltyWinner } = require('../utils/penaltyWinner.util');
 
 // Helper to validate ObjectId
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -164,9 +165,9 @@ const updateMatch = async (req, res) => {
       if (updates.actualWinner !== null) {
         const teamA = updates.teamA || match.teamA;
         const teamB = updates.teamB || match.teamB;
-        const validWinners = [teamA, teamB, 'draw'];
+        const validWinners = [teamA, teamB, 'DRAW'];
         if (!validWinners.includes(updates.actualWinner)) {
-          return res.status(400).json({ success: false, message: `actualWinner must be '${teamA}', '${teamB}', 'draw', or null` });
+          return res.status(400).json({ success: false, message: `actualWinner must be '${teamA}', '${teamB}', 'DRAW', or null` });
         }
       }
     }
@@ -183,7 +184,7 @@ const updateMatch = async (req, res) => {
 const submitMatchResult = async (req, res) => {
   try {
     const { id } = req.params;
-    const { actualTeamAScore, actualTeamBScore } = req.body;
+    const { actualTeamAScore, actualTeamBScore, penaltyWinnerTeam } = req.body;
 
     if (!isValidObjectId(id)) {
       return res.status(400).json({ success: false, message: 'Invalid match id' });
@@ -223,6 +224,15 @@ const submitMatchResult = async (req, res) => {
     } else {
       match.actualWinner = 'DRAW';
     }
+
+    let finalPenaltyWinnerTeam = null;
+    try {
+      finalPenaltyWinnerTeam = validatePenaltyWinner(penaltyWinnerTeam, match.teamA, match.teamB, teamAScore === teamBScore);
+    } catch (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    match.penaltyWinnerTeam = finalPenaltyWinnerTeam;
 
     const predictions = await Prediction.find({ matchId: match._id }).lean().exec();
     let processedPredictions = 0;
@@ -305,6 +315,7 @@ const getActiveMatches = async (req, res) => {
         predictedTeamAScore: prediction ? prediction.predictedTeamAScore : null,
         predictedTeamBScore: prediction ? prediction.predictedTeamBScore : null,
         predictedWinner: prediction ? prediction.predictedWinner : null,
+        penaltyWinner: prediction ? prediction.penaltyWinner : null,
       };
     });
 
